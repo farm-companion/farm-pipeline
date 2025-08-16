@@ -8,8 +8,11 @@ from typing import List, TypedDict
 ROOT = Path(__file__).resolve().parents[1]
 DIST = ROOT / "dist"
 
-# sibling repo: farm-schema/sample/seasons.uk.json
-SCHEMA_SAMPLE = ROOT.parents[0] / "farm-schema" / "sample" / "seasons.uk.json"
+# Candidate locations for the sample (CI vs local)
+SCHEMA_SAMPLE_CANDIDATES = [
+    ROOT / "farm-schema" / "sample" / "seasons.uk.json",        # CI: extra checkout into subfolder
+    ROOT.parents[0] / "farm-schema" / "sample" / "seasons.uk.json",  # Local: sibling repo
+]
 
 class SeasonItem(TypedDict, total=False):
     month: int
@@ -19,11 +22,21 @@ class SeasonItem(TypedDict, total=False):
     sourceName: str
     updatedAt: str
 
+def find_sample() -> Path | None:
+    for p in SCHEMA_SAMPLE_CANDIDATES:
+        if p.exists():
+            return p
+    return None
+
 def load_local() -> List[SeasonItem]:
-    if not SCHEMA_SAMPLE.exists():
-        print(f"❌ Sample file missing: {SCHEMA_SAMPLE}", file=sys.stderr)
+    sample = find_sample()
+    if not sample:
+        print("❌ Sample file missing; looked in:", file=sys.stderr)
+        for p in SCHEMA_SAMPLE_CANDIDATES:
+            print(f"  - {p}", file=sys.stderr)
         sys.exit(1)
-    data = json.loads(SCHEMA_SAMPLE.read_text("utf-8"))
+
+    data = json.loads(sample.read_text("utf-8"))
     now = datetime.now(timezone.utc).isoformat()
     for d in data:
         d.setdefault("source", "https://example.org/sample")
