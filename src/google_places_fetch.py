@@ -133,7 +133,7 @@ async def get_place_details(client: httpx.AsyncClient, place_id: str) -> Optiona
     url = "https://maps.googleapis.com/maps/api/place/details/json"
     params = {
         "place_id": place_id,
-        "fields": "name,formatted_address,formatted_phone_number,website,opening_hours,geometry,types",
+        "fields": "name,formatted_address,formatted_phone_number,website,opening_hours,geometry,types,photos",
         "key": GOOGLE_API_KEY
     }
     
@@ -151,6 +151,37 @@ async def get_place_details(client: httpx.AsyncClient, place_id: str) -> Optiona
     except Exception as e:
         print(f"❌ Error getting details for {place_id}: {e}")
         return None
+
+async def get_place_images(client: httpx.AsyncClient, place_id: str, photos: List[Dict[str, Any]], max_images: int = 3) -> List[str]:
+    """Get image URLs for a place from Google Places API."""
+    image_urls = []
+    
+    if not photos:
+        return image_urls
+    
+    # Limit to max_images
+    photos = photos[:max_images]
+    
+    for i, photo in enumerate(photos):
+        try:
+            photo_reference = photo.get('photo_reference')
+            if not photo_reference:
+                continue
+            
+            # Build Google Places photo URL
+            image_url = f"https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference={photo_reference}&key={GOOGLE_API_KEY}"
+            image_urls.append(image_url)
+            
+            print(f"    📸 Added image {i+1} for {place_id}")
+            
+            # Rate limiting between image requests
+            await asyncio.sleep(0.5)
+            
+        except Exception as e:
+            print(f"    ❌ Error getting image {i+1} for {place_id}: {e}")
+            continue
+    
+    return image_urls
 
 def parse_address(address: str) -> Dict[str, str]:
     """Parse address into components."""
@@ -204,6 +235,15 @@ async def main():
                 details = await get_place_details(client, place_id)
                 if details:
                     place.update(details)
+                    
+                    # Get images if available
+                    photos = details.get('photos', [])
+                    if photos:
+                        print(f"  📸 Found {len(photos)} photos for {place.get('name', 'Unknown')}")
+                        images = await get_place_images(client, place_id, photos)
+                        place['images'] = images
+                    else:
+                        place['images'] = []
                 
                 # Enhance with description and offerings
                 enhanced_place = enhance_place_data_with_description(place)
@@ -213,7 +253,10 @@ async def main():
             # Be nice to the API
             await asyncio.sleep(1)
     
+    # Count shops with images
+    shops_with_images = sum(1 for place in all_places if place.get('images'))
     print(f"\n📊 Found {len(all_places)} unique farm shops")
+    print(f"📸 {shops_with_images} shops have images ({shops_with_images/len(all_places)*100:.1f}%)")
     
     # Convert to FarmShop models
     shops = []
@@ -240,6 +283,7 @@ async def main():
                 ),
                 offerings=place.get('extracted_offerings', ['farm shop']),  # Use enhanced offerings
                 description=place.get('generated_description'),  # Add generated description
+                images=place.get('images', []),  # Add images from Google Places
                 verified=False,
                 adsenseEligible=True
             )
@@ -284,7 +328,9 @@ async def main():
     with open(output_dir / "farms.geo.json", "w") as f:
         json.dump(geojson, f, indent=2)
     
-    print(f"✅ Saved {len(shops)} farm shops to dist/farms.uk.json and dist/farms.geo.json")
+    # Count total images
+    total_images = sum(len(shop.images) for shop in shops)
+    print(f"✅ Saved {len(shops)} farm shops with {total_images} images to dist/farms.uk.json and dist/farms.geo.json")
 
 if __name__ == "__main__":
     asyncio.run(main())
