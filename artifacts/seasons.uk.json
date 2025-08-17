@@ -1,0 +1,170 @@
+[
+  {
+    "month": 1,
+    "inSeason": [
+      "Brussels sprouts",
+      "Cabbage",
+      "Leeks",
+      "Parsnips",
+      "Beetroot"
+    ],
+    "notes": "Deep winter roots and brassicas.",
+    "source": "https://www.eufic.org/en/explore-seasonal-fruit-and-vegetables-in-europe",
+    "sourceName": "EUFIC seasonal explorer",
+    "updatedAt": "2025-08-16T19:56:04.313955+00:00"
+  },
+  {
+    "month": 2,
+    "inSeason": [
+      "Kale",
+      "Leeks",
+      "Parsnips",
+      "Celeriac",
+      "Swede"
+    ],
+    "notes": "Late-winter hearty veg.",
+    "source": "https://www.eufic.org/en/explore-seasonal-fruit-and-vegetables-in-europe",
+    "sourceName": "EUFIC seasonal explorer",
+    "updatedAt": "2025-08-16T19:56:04.313955+00:00"
+  },
+  {
+    "month": 3,
+    "inSeason": [
+      "Spring greens",
+      "Purple sprouting broccoli",
+      "Leeks",
+      "Rhubarb",
+      "Wild garlic"
+    ],
+    "notes": "Early spring shoots.",
+    "source": "https://www.eufic.org/en/explore-seasonal-fruit-and-vegetables-in-europe",
+    "sourceName": "EUFIC seasonal explorer",
+    "updatedAt": "2025-08-16T19:56:04.313955+00:00"
+  },
+  {
+    "month": 4,
+    "inSeason": [
+      "Asparagus",
+      "Radishes",
+      "Spring onions",
+      "Rhubarb",
+      "Lamb"
+    ],
+    "notes": "First asparagus arrives.",
+    "source": "https://www.eufic.org/en/explore-seasonal-fruit-and-vegetables-in-europe",
+    "sourceName": "EUFIC seasonal explorer",
+    "updatedAt": "2025-08-16T19:56:04.313955+00:00"
+  },
+  {
+    "month": 5,
+    "inSeason": [
+      "Asparagus",
+      "New potatoes",
+      "Lettuce",
+      "Strawberries",
+      "Peas"
+    ],
+    "notes": "Early soft fruit and salad.",
+    "source": "https://www.eufic.org/en/explore-seasonal-fruit-and-vegetables-in-europe",
+    "sourceName": "EUFIC seasonal explorer",
+    "updatedAt": "2025-08-16T19:56:04.313955+00:00"
+  },
+  {
+    "month": 6,
+    "inSeason": [
+      "Strawberries",
+      "Broad beans",
+      "Peas",
+      "Courgettes",
+      "Cherries"
+    ],
+    "notes": "Summer abundance begins.",
+    "source": "https://www.eufic.org/en/explore-seasonal-fruit-and-vegetables-in-europe",
+    "sourceName": "EUFIC seasonal explorer",
+    "updatedAt": "2025-08-16T19:56:04.313955+00:00"
+  },
+  {
+    "month": 7,
+    "inSeason": [
+      "Raspberries",
+      "Blueberries",
+      "Tomatoes",
+      "Cucumbers",
+      "New potatoes"
+    ],
+    "notes": "Peak soft fruit and salad.",
+    "source": "https://www.eufic.org/en/explore-seasonal-fruit-and-vegetables-in-europe",
+    "sourceName": "EUFIC seasonal explorer",
+    "updatedAt": "2025-08-16T19:56:04.313955+00:00"
+  },
+  {
+    "month": 8,
+    "inSeason": [
+      "Sweetcorn",
+      "Tomatoes",
+      "Plums",
+      "Blackberries",
+      "Runner beans"
+    ],
+    "notes": "High summer; hedgerow fruit.",
+    "source": "https://www.eufic.org/en/explore-seasonal-fruit-and-vegetables-in-europe",
+    "sourceName": "EUFIC seasonal explorer",
+    "updatedAt": "2025-08-16T19:56:04.313955+00:00"
+  },
+  {
+    "month": 9,
+    "inSeason": [
+      "Apples",
+      "Pears",
+      "Damsons",
+      "Squash",
+      "Beetroot"
+    ],
+    "notes": "Early autumn harvest.",
+    "source": "https://www.eufic.org/en/explore-seasonal-fruit-and-vegetables-in-europe",
+    "sourceName": "EUFIC seasonal explorer",
+    "updatedAt": "2025-08-16T19:56:04.313955+00:00"
+  },
+  {
+    "month": 10,
+    "inSeason": [
+      "Pumpkins",
+      "Squash",
+      "Cabbage",
+      "Kale",
+      "Mushrooms"
+    ],
+    "notes": "Hearty autumn produce.",
+    "source": "https://www.eufic.org/en/explore-seasonal-fruit-and-vegetables-in-europe",
+    "sourceName": "EUFIC seasonal explorer",
+    "updatedAt": "2025-08-16T19:56:04.313955+00:00"
+  },
+  {
+    "month": 11,
+    "inSeason": [
+      "Cabbage",
+      "Parsnips",
+      "Leeks",
+      "Brussels sprouts",
+      "Venison"
+    ],
+    "notes": "Frost-sweetened roots.",
+    "source": "https://www.eufic.org/en/explore-seasonal-fruit-and-vegetables-in-europe",
+    "sourceName": "EUFIC seasonal explorer",
+    "updatedAt": "2025-08-16T19:56:04.313955+00:00"
+  },
+  {
+    "month": 12,
+    "inSeason": [
+      "Brussels sprouts",
+      "Parsnips",
+      "Red cabbage",
+      "Leeks",
+      "Chestnuts"
+    ],
+    "notes": "Festive winter staples.",
+    "source": "https://www.eufic.org/en/explore-seasonal-fruit-and-vegetables-in-europe",
+    "sourceName": "EUFIC seasonal explorer",
+    "updatedAt": "2025-08-16T19:56:04.313955+00:00"
+  }
+]
