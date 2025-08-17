@@ -40,6 +40,23 @@ jobs:
           SEASON_PROVIDER: local
         run: ./seasons.sh
 
+      # Notify farm-frontend to pull the latest seasons JSON immediately
+      - name: Notify farm-frontend (repository_dispatch)
+        if: ${{ success() }}
+        env:
+          GH_TOKEN: ${{ secrets.FRONTEND_DISPATCH_PAT }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "FRONTEND_DISPATCH_PAT is missing"; exit 1
+          fi
+          echo 'Triggering repository_dispatch: seasons-updated'
+          curl -fsSL -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: token ${GH_TOKEN}" \
+            https://api.github.com/repos/farm-companion/farm-frontend/dispatches \
+            -d '{"event_type":"seasons-updated","client_payload":{"source_repo":"farm-pipeline","workflow":"seasons.yml"}}'
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
