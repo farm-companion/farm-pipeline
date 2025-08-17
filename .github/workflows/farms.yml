@@ -1,0 +1,58 @@
+name: Build farms dataset
+
+on:
+  schedule:
+    - cron: "30 2 * * *"   # 02:30 UTC nightly
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: |
+          python -m pip install -U pip wheel
+          pip install crawl4ai playwright beautifulsoup4 httpx orjson pydantic jsonschema pygeohash python-slugify
+          python -m playwright install --with-deps chromium
+
+      - name: Build dataset
+        env:
+          NOMINATIM_UA: FarmCompanionBot/1.0 (+https://www.farmcompanion.co.uk/contact)
+          NOMINATIM_EMAIL: ${{ secrets.NOMINATIM_EMAIL }}
+        run: ./shops.sh
+
+      - name: Commit artifacts to data branch
+        run: |
+          set -euo pipefail
+          BR=data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # switch/create data branch
+          if git show-ref --verify --quiet refs/heads/$BR; then
+            git checkout $BR
+          else
+            git checkout --orphan $BR
+            git rm -rf . || true
+          fi
+          mkdir -p dist
+          cp -f dist/farms.uk.json dist/farms.geo.json ./ || true
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "data: nightly farms dataset"
+            git push origin $BR
+          fi

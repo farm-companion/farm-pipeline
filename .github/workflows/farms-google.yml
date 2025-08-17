@@ -1,0 +1,72 @@
+name: Build farms dataset (Google Places)
+
+on:
+  schedule:
+    - cron: "30 2 * * *"   # 02:30 UTC nightly
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: |
+          python -m pip install -U pip wheel
+          pip install httpx pydantic orjson pygeohash python-slugify
+
+      - name: Build dataset (Google Places)
+        env:
+          GOOGLE_PLACES_API_KEY: ${{ secrets.GOOGLE_PLACES_API_KEY }}
+        run: ./google_places.sh
+
+      - name: Commit artifacts to data branch
+        run: |
+          set -euo pipefail
+          BR=data
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # switch/create data branch
+          if git show-ref --verify --quiet refs/heads/$BR; then
+            git checkout $BR
+          else
+            git checkout --orphan $BR
+            git rm -rf . || true
+          fi
+          mkdir -p dist
+          cp -f dist/farms.uk.json dist/farms.geo.json ./ || true
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "data: nightly farms dataset (Google Places)"
+            git push origin $BR
+          fi
+
+      - name: Notify farm-frontend (repository_dispatch)
+        if: ${{ success() }}
+        env:
+          GH_TOKEN: ${{ secrets.FRONTEND_DISPATCH_PAT }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "FRONTEND_DISPATCH_PAT is missing"; exit 1
+          fi
+          echo 'Triggering repository_dispatch: farms-updated'
+          curl -fsSL -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: token ${GH_TOKEN}" \
+            https://api.github.com/repos/farm-companion/farm-frontend/dispatches \
+            -d '{"event_type":"farms-updated","client_payload":{"source_repo":"farm-pipeline","workflow":"farms-google.yml"}}'

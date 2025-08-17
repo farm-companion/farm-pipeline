@@ -1,14 +1,9 @@
-# List sources you are permitted to crawl. Start small; we'll expand.
+# seeds/uk.yml
 sources:
-  # Official / high-signal pages (examples – replace with allowed URLs)
-  # - url: "https://example.org/defra-directory"     # DEFRA list page (if public & permitted)
-  # - url: "https://example.org/association-members"  # UK farm assoc members page
-  # - url: "https://example.org/county-listings"      # County directory
-  # Each item can optionally provide hints:
-  #   css_list_selector: ".listing-item"
-  #   pagination: { next_selector: "a.next", limit: 5 }
-  #   detail_link_selector: "a.details"
-
-# Notes:
-# • Only crawl pages that allow it (robots, T&Cs). We'll respect rate limits.
-# • We'll add site-specific extractors as needed in the next steps.
+  - url: "https://example.org/your-allowed-list"   # replace with a permitted URL
+    list_selector: ".listing"                       # tweak these selectors
+    name_selector: ".name"
+    addr_selector: ".address"
+    county_selector: ".county"
+    pc_selector: ".postcode"
+    website_selector: "a.website"
