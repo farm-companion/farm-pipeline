@@ -13,6 +13,7 @@ from typing import Dict, List, Any, Optional
 import httpx
 from models import FarmShop, Location, Contact
 from utils_geo import slugify, haversine_km
+from description_generator import enhance_place_data_with_description
 
 # Configuration
 GOOGLE_API_KEY = os.getenv('GOOGLE_PLACES_API_KEY')
@@ -204,7 +205,9 @@ async def main():
                 if details:
                     place.update(details)
                 
-                all_places.append(place)
+                # Enhance with description and offerings
+                enhanced_place = enhance_place_data_with_description(place)
+                all_places.append(enhanced_place)
                 print(f"  ✅ Found: {place.get('name', 'Unknown')}")
             
             # Be nice to the API
@@ -235,7 +238,8 @@ async def main():
                     phone=place.get('formatted_phone_number', ''),
                     website=place.get('website', '')
                 ),
-                offerings=['farm shop'],  # Default offering
+                offerings=place.get('extracted_offerings', ['farm shop']),  # Use enhanced offerings
+                description=place.get('generated_description'),  # Add generated description
                 verified=False,
                 adsenseEligible=True
             )

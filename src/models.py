@@ -34,6 +34,7 @@ class FarmShop(BaseModel):
     contact: Contact = Field(default_factory=Contact)
     offerings: List[str] = Field(default_factory=list)
     hours: List[OpeningHour] = Field(default_factory=list)
+    description: Optional[str] = None  # Rich description of the farm shop
     verified: bool = False
     adsenseEligible: bool = True
     updatedAt: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
