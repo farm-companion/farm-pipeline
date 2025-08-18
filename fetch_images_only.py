@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Fetch images for existing farm shops using Google Places API.
-This script only adds images to existing farm data without changing other information.
+Hybrid image fetching: Google Places (real photos) + fallback to curated farm images.
+This script prioritizes real farm photos from Google Places, with fallback to quality farm images.
 """
 
 import asyncio
@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 import httpx
 import time
+import random
 
 # Configuration
 GOOGLE_API_KEY = os.getenv('GOOGLE_PLACES_API_KEY')
@@ -21,11 +22,25 @@ if not GOOGLE_API_KEY:
     print("export GOOGLE_PLACES_API_KEY='your_api_key_here'")
     sys.exit(1)
 
+# High-quality fallback farm images (curated)
+FALLBACK_IMAGES = [
+    "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop",
+    "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=800&h=600&fit=crop",
+    "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop",
+    "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=800&h=600&fit=crop",
+    "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop",
+    "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=800&h=600&fit=crop",
+    "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop",
+    "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=800&h=600&fit=crop",
+    "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=800&h=600&fit=crop",
+    "https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=800&h=600&fit=crop"
+]
+
 class ImageFetcher:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.base_url = "https://maps.googleapis.com/maps/api/place"
-        self.session = httpx.AsyncClient(timeout=30.0)
+        self.session = httpx.AsyncClient(timeout=30.0, follow_redirects=True)
         
     async def search_place(self, shop_name: str, address: str) -> Optional[str]:
         """Search for a place using Google Places API Text Search"""
@@ -56,8 +71,8 @@ class ImageFetcher:
             print(f"    ❌ Error searching for {shop_name}: {e}")
             return None
     
-    async def get_place_images(self, place_id: str, max_images: int = 3) -> List[str]:
-        """Get image URLs for a place from Google Places API"""
+    async def get_place_images(self, place_id: str, max_images: int = 1) -> List[str]:
+        """Get image URLs for a place from Google Places API with proper redirect handling"""
         try:
             url = f"{self.base_url}/details/json"
             params = {
@@ -87,10 +102,22 @@ class ImageFetcher:
                         continue
                     
                     # Build Google Places photo URL
-                    image_url = f"https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference={photo_reference}&key={self.api_key}"
-                    image_urls.append(image_url)
+                    photo_url = f"https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference={photo_reference}&key={self.api_key}"
                     
-                    print(f"      📸 Added image {i+1}")
+                    # Follow the redirect to get the actual image URL
+                    try:
+                        photo_response = await self.session.head(photo_url)
+                        if photo_response.status_code == 200:
+                            # If it's a redirect, get the final URL
+                            final_url = str(photo_response.url)
+                            image_urls.append(final_url)
+                            print(f"      📸 Added real Google Places image {i+1}")
+                        else:
+                            print(f"      ⚠️  Photo {i+1} returned status {photo_response.status_code}")
+                    except Exception as photo_error:
+                        print(f"      ⚠️  Error following redirect for photo {i+1}: {photo_error}")
+                        # Fallback to original URL
+                        image_urls.append(photo_url)
                     
                     # Rate limiting between image requests
                     await asyncio.sleep(0.5)
@@ -105,27 +132,39 @@ class ImageFetcher:
             print(f"    ❌ Error getting images for {place_id}: {e}")
             return []
     
+    def get_fallback_image(self, shop_name: str) -> str:
+        """Get a curated fallback farm image"""
+        return random.choice(FALLBACK_IMAGES)
+    
     async def process_farm_images(self, farm: Dict) -> List[str]:
-        """Process a single farm to get images from Google Places"""
-        shop_name = farm['name']
-        address = f"{farm['location']['address']}, {farm['location']['city']}"
-        
+        """Process a single farm to get images - Google Places first, fallback second"""
+        shop_name = farm.get('name', 'Unknown Farm')
         print(f"🔍 Processing: {shop_name}")
         
-        # Search for the place
-        place_id = await self.search_place(shop_name, address)
-        if not place_id:
-            return []
+        # Try Google Places first (real photos)
+        try:
+            address = f"{farm['location']['address']}, {farm['location']['city']}"
+            
+            # Search for the place
+            place_id = await self.search_place(shop_name, address)
+            if place_id:
+                # Get images from Google Places
+                images = await self.get_place_images(place_id)
+                if images:
+                    print(f"    ✅ Found {len(images)} real Google Places images")
+                    return images
+                else:
+                    print(f"    ⚠️  No Google Places images found, using fallback")
+            else:
+                print(f"    ⚠️  Place not found in Google Places, using fallback")
+                
+        except Exception as e:
+            print(f"    ⚠️  Google Places error: {e}, using fallback")
         
-        # Get images
-        images = await self.get_place_images(place_id)
-        
-        if images:
-            print(f"    ✅ Found {len(images)} images")
-        else:
-            print(f"    ❌ No images found")
-        
-        return images
+        # Fallback to curated farm image
+        fallback_image = self.get_fallback_image(shop_name)
+        print(f"    📸 Using curated fallback image")
+        return [fallback_image]
 
 async def load_existing_farms() -> List[Dict]:
     """Load existing farms data"""
@@ -146,8 +185,8 @@ async def save_farms_data(farms: List[Dict]):
 
 async def main():
     """Main function to fetch images for existing farms"""
-    print("🖼️  Starting image fetch for existing farm shops...")
-    print(f"🔑 Using API key: {GOOGLE_API_KEY[:10]}...")
+    print("🖼️  Starting hybrid image fetch for existing farm shops...")
+    print(f"🔑 Using Google Places API + fallback images")
     
     # Load existing farms
     try:
@@ -160,24 +199,44 @@ async def main():
     # Initialize image fetcher
     fetcher = ImageFetcher(GOOGLE_API_KEY)
     
-    # Process farms (limit for testing)
+    # Process farms that need images (clear existing problematic URLs)
+    farms_to_process = []
+    for farm in farms:
+        # Clear existing problematic URLs
+        if farm.get('images'):
+            # Check if it's a problematic URL (contains photoreference or is fallback)
+            if any('photoreference' in img or 'unsplash.com' in img for img in farm['images']):
+                print(f"🔄 Clearing existing images for {farm['name']}")
+                farm['images'] = []
+        
+        # Add to processing list if no images
+        if not farm.get('images') or len(farm['images']) == 0:
+            farms_to_process.append(farm)
+    
+    print(f"📋 Found {len(farms_to_process)} farms that need images")
+    
+    # Process first 20 farms that need images
     processed_count = 0
     farms_with_images = 0
     total_images = 0
+    google_places_count = 0
+    fallback_count = 0
     
-    # Process first 10 farms for testing
-    for i, farm in enumerate(farms[:10]):
-        if farm.get('images'):
-            print(f"⏭️  Skipping {farm['name']} - already has {len(farm['images'])} images")
-            continue
-        
+    for i, farm in enumerate(farms_to_process):
         try:
             images = await fetcher.process_farm_images(farm)
             if images:
                 farm['images'] = images
                 farms_with_images += 1
                 total_images += len(images)
-                print(f"✅ Added {len(images)} images to {farm['name']}")
+                
+                # Track source
+                if any('googleusercontent.com' in img for img in images):
+                    google_places_count += 1
+                    print(f"✅ Added {len(images)} real Google Places images to {farm['name']}")
+                else:
+                    fallback_count += 1
+                    print(f"✅ Added {len(images)} fallback image to {farm['name']}")
             else:
                 farm['images'] = []
                 print(f"❌ No images found for {farm['name']}")
@@ -197,6 +256,8 @@ async def main():
         print(f"\n✅ Successfully processed {processed_count} farms")
         print(f"📸 {farms_with_images} farms now have images")
         print(f"🖼️  Total images added: {total_images}")
+        print(f"🏪 Google Places images: {google_places_count}")
+        print(f"🖼️  Fallback images: {fallback_count}")
         print("💾 Updated farms data saved")
         
         # Show statistics

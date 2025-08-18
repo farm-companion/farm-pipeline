@@ -39,6 +39,12 @@ class FarmShop(BaseModel):
     verified: bool = False
     adsenseEligible: bool = True
     updatedAt: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    # Additional Google Places data
+    rating: Optional[float] = None  # Google rating (1-5)
+    user_ratings_total: Optional[int] = None  # Number of reviews
+    price_level: Optional[int] = None  # Price level (0-4)
+    place_id: Optional[str] = None  # Google Places ID
+    types: List[str] = Field(default_factory=list)  # Google Places types
 
     def key_name_postcode(self) -> str:
         pc = (self.location.postcode or '').replace(' ', '').upper()

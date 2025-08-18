@@ -8,6 +8,7 @@ import asyncio
 import json
 import os
 import sys
+import argparse
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 import httpx
@@ -98,42 +99,42 @@ async def search_places_nearby(client: httpx.AsyncClient, lat: float, lng: float
     }
     
     all_results = []
-    next_page_token = None
+    page_token = None
     
-    try:
-        while True:
-            if next_page_token:
-                params["pagetoken"] = next_page_token
-                await asyncio.sleep(2)  # Required delay for pagetoken
-            
+    while True:
+        if page_token:
+            params["pagetoken"] = page_token
+        
+        try:
             response = await client.get(url, params=params)
             response.raise_for_status()
             data = response.json()
             
-            if data["status"] != "OK" and data["status"] != "ZERO_RESULTS":
-                print(f"⚠️  API error for {lat},{lng}: {data['status']}")
-                break
-            
-            if data["status"] == "ZERO_RESULTS":
-                break
-            
-            all_results.extend(data.get("results", []))
-            next_page_token = data.get("next_page_token")
-            
-            if not next_page_token:
+            if data["status"] == "OK":
+                all_results.extend(data["results"])
+                page_token = data.get("next_page_token")
+                
+                if not page_token:
+                    break
+                    
+                # Wait before requesting next page
+                await asyncio.sleep(2)
+            else:
+                print(f"⚠️  API Error: {data['status']} - {data.get('error_message', 'Unknown error')}")
                 break
                 
-    except Exception as e:
-        print(f"❌ Error searching near {lat},{lng}: {e}")
+        except Exception as e:
+            print(f"❌ Error fetching places: {e}")
+            break
     
     return all_results
 
 async def get_place_details(client: httpx.AsyncClient, place_id: str) -> Optional[Dict[str, Any]]:
-    """Get detailed information for a specific place."""
+    """Get detailed information for a place."""
     url = "https://maps.googleapis.com/maps/api/place/details/json"
     params = {
         "place_id": place_id,
-        "fields": "name,formatted_address,formatted_phone_number,website,opening_hours,geometry,types,photos",
+        "fields": "name,formatted_address,address_components,international_phone_number,rating,user_ratings_total,price_level,reviews,editorial_summary,photos,website,url",
         "key": GOOGLE_API_KEY
     }
     
@@ -145,67 +146,93 @@ async def get_place_details(client: httpx.AsyncClient, place_id: str) -> Optiona
         if data["status"] == "OK":
             return data["result"]
         else:
-            print(f"⚠️  Details error for {place_id}: {data['status']}")
+            print(f"⚠️  Details API Error: {data['status']} for {place_id}")
             return None
             
     except Exception as e:
-        print(f"❌ Error getting details for {place_id}: {e}")
+        print(f"❌ Error fetching details for {place_id}: {e}")
         return None
 
-async def get_place_images(client: httpx.AsyncClient, place_id: str, photos: List[Dict[str, Any]], max_images: int = 3) -> List[str]:
-    """Get image URLs for a place from Google Places API."""
+async def get_place_images(client: httpx.AsyncClient, place_id: str, photos: List[Dict], max_images: int = 1) -> List[str]:
+    """Get image URLs for a place."""
     image_urls = []
     
-    if not photos:
-        return image_urls
-    
-    # Limit to max_images
-    photos = photos[:max_images]
-    
-    for i, photo in enumerate(photos):
+    for i, photo in enumerate(photos[:max_images]):
         try:
-            photo_reference = photo.get('photo_reference')
-            if not photo_reference:
+            # Get the photo reference
+            photo_ref = photo.get("photo_reference")
+            if not photo_ref:
                 continue
             
-            # Build Google Places photo URL
-            image_url = f"https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference={photo_reference}&key={GOOGLE_API_KEY}"
-            image_urls.append(image_url)
+            # Construct the image URL
+            image_url = f"https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photoreference={photo_ref}&key={GOOGLE_API_KEY}"
             
-            print(f"    📸 Added image {i+1} for {place_id}")
-            
-            # Rate limiting between image requests
-            await asyncio.sleep(0.5)
-            
+            # Verify the image URL is accessible
+            async with httpx.AsyncClient(follow_redirects=True) as img_client:
+                head_response = await img_client.head(image_url)
+                if head_response.status_code == 200:
+                    image_urls.append(image_url)
+                else:
+                    print(f"⚠️  Image not accessible for {place_id}")
+                    
         except Exception as e:
-            print(f"    ❌ Error getting image {i+1} for {place_id}: {e}")
+            print(f"❌ Error processing image for {place_id}: {e}")
             continue
     
     return image_urls
 
+def parse_address_components(address_components: List[Dict], formatted_address: str) -> Dict[str, str]:
+    """Parse address components into structured format."""
+    result = {
+        "address": "",
+        "city": "",
+        "county": "",
+        "postcode": "",
+        "country": ""
+    }
+    
+    for component in address_components:
+        types = component.get("types", [])
+        long_name = component.get("long_name", "")
+        short_name = component.get("short_name", "")
+        
+        if "street_number" in types or "route" in types:
+            if result["address"]:
+                result["address"] += ", " + long_name
+            else:
+                result["address"] = long_name
+        elif "locality" in types or "sublocality" in types:
+            result["city"] = long_name
+        elif "administrative_area_level_1" in types:
+            result["county"] = long_name
+        elif "postal_code" in types:
+            result["postcode"] = long_name
+        elif "country" in types:
+            result["country"] = long_name
+    
+    # Fallback: if no structured address, use formatted address
+    if not result["address"]:
+        parts = formatted_address.split(',')
+        if len(parts) >= 2:
+            result["address"] = parts[0].strip()
+            if len(parts) > 2:
+                result["city"] = parts[-2].strip()
+            result["postcode"] = parts[-1].strip()
+    
+    return result
+
 def parse_address(address: str) -> Dict[str, str]:
-    """Parse address into components."""
-    # Basic parsing - you might want to use a proper address parser
+    """Legacy function for backward compatibility."""
     parts = address.split(',')
     if len(parts) >= 2:
         street = parts[0].strip()
         city = parts[-2].strip() if len(parts) > 2 else parts[-1].strip()
         postcode = parts[-1].strip()
         
-        # Extract county from address
-        county = ""
-        for part in parts[1:-1]:
-            part = part.strip()
-            if any(county_name in part.lower() for county_name in [
-                'county', 'shire', 'hampshire', 'sussex', 'essex', 'kent', 'norfolk', 'suffolk'
-            ]):
-                county = part
-                break
-        
         return {
             "address": street,
             "city": city,
-            "county": county,
+            "county": "",
             "postcode": postcode
         }
     
@@ -213,7 +240,20 @@ def parse_address(address: str) -> Dict[str, str]:
 
 async def main():
     """Main function to fetch all UK farm shops."""
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Fetch UK farm shops from Google Places API')
+    parser.add_argument('--no-images', action='store_true', help='Skip fetching images to save API calls')
+    parser.add_argument('--images-only', action='store_true', help='Only fetch images for existing farms (requires farms.uk.json)')
+    parser.add_argument('--max-images', type=int, default=1, help='Maximum number of images per farm (default: 1)')
+    args = parser.parse_args()
+    
+    if args.images_only:
+        await fetch_images_only(args.max_images)
+        return
+    
     print("🔍 Starting Google Places farm shop search...")
+    if args.no_images:
+        print("📸 Image fetching disabled - will save API calls")
     
     all_places = []
     seen_place_ids = set()
@@ -236,12 +276,15 @@ async def main():
                 if details:
                     place.update(details)
                     
-                    # Get images if available
-                    photos = details.get('photos', [])
-                    if photos:
-                        print(f"  📸 Found {len(photos)} photos for {place.get('name', 'Unknown')}")
-                        images = await get_place_images(client, place_id, photos)
-                        place['images'] = images
+                    # Get images only if not disabled
+                    if not args.no_images:
+                        photos = details.get('photos', [])
+                        if photos:
+                            print(f"  📸 Found {len(photos)} photos for {place.get('name', 'Unknown')}")
+                            images = await get_place_images(client, place_id, photos, args.max_images)
+                            place['images'] = images
+                        else:
+                            place['images'] = []
                     else:
                         place['images'] = []
                 
@@ -256,81 +299,150 @@ async def main():
     # Count shops with images
     shops_with_images = sum(1 for place in all_places if place.get('images'))
     print(f"\n📊 Found {len(all_places)} unique farm shops")
-    print(f"📸 {shops_with_images} shops have images ({shops_with_images/len(all_places)*100:.1f}%)")
+    if not args.no_images:
+        print(f"📸 {shops_with_images} shops have images ({shops_with_images/len(all_places)*100:.1f}%)")
     
     # Convert to FarmShop models
     shops = []
     for place in all_places:
         try:
             name = place.get('name', 'Unknown Farm Shop')
-            address_info = parse_address(place.get('formatted_address', ''))
             
-            # Create FarmShop object
+            # Use address components if available, otherwise fallback to formatted address
+            if place.get('address_components'):
+                address_info = parse_address_components(place.get('address_components', []), place.get('formatted_address', ''))
+            else:
+                address_info = parse_address(place.get('formatted_address', ''))
+            
+            # Create location object
+            location = Location(
+                lat=place.get('geometry', {}).get('location', {}).get('lat', 0),
+                lng=place.get('geometry', {}).get('location', {}).get('lng', 0),
+                address=address_info.get('address', ''),
+                city=address_info.get('city', ''),
+                county=address_info.get('county', ''),
+                postcode=address_info.get('postcode', '')
+            )
+            
+            # Create contact object
+            contact = Contact(
+                phone=place.get('international_phone_number', ''),
+                email=None,  # Google Places doesn't provide email
+                website=place.get('website', '')
+            )
+            
+            # Create farm shop object
             shop = FarmShop(
+                id=f"farm_{slugify(name)}",
                 name=name,
                 slug=slugify(name),
-                location=Location(
-                    address=address_info['address'],
-                    city=address_info['city'],
-                    county=address_info['county'],
-                    postcode=address_info['postcode'],
-                    lat=place.get('geometry', {}).get('location', {}).get('lat', 0),
-                    lng=place.get('geometry', {}).get('location', {}).get('lng', 0)
-                ),
-                contact=Contact(
-                    phone=place.get('formatted_phone_number', ''),
-                    website=place.get('website', '')
-                ),
-                offerings=place.get('extracted_offerings', ['farm shop']),  # Use enhanced offerings
-                description=place.get('generated_description'),  # Add generated description
-                images=place.get('images', []),  # Add images from Google Places
-                verified=False,
-                adsenseEligible=True
+                location=location,
+                contact=contact,
+                offerings=place.get('offerings', []),
+                images=place.get('images', []),
+                rating=place.get('rating'),
+                user_ratings_total=place.get('user_ratings_total'),
+                price_level=place.get('price_level'),
+                place_id=place.get('place_id'),
+                types=place.get('types', [])
             )
             
             shops.append(shop)
             
         except Exception as e:
             print(f"❌ Error processing {place.get('name', 'Unknown')}: {e}")
+            continue
     
-    # Save results
+    # Save to JSON files
     output_dir = Path("dist")
     output_dir.mkdir(exist_ok=True)
     
     # Save as JSON
-    with open(output_dir / "farms.uk.json", "w") as f:
-        json.dump([shop.model_dump() for shop in shops], f, indent=2)
+    with open(output_dir / "farms.uk.json", "w", encoding="utf-8") as f:
+        json.dump([shop.dict() for shop in shops], f, indent=2, ensure_ascii=False)
     
-    # Save as GeoJSON
+    # Save as GeoJSON for mapping
     geojson = {
         "type": "FeatureCollection",
-        "features": [
-            {
-                "type": "Feature",
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [shop.location.lng, shop.location.lat]
-                },
-                "properties": {
-                    "id": shop.id,
-                    "name": shop.name,
-                    "slug": shop.slug,
-                    "address": shop.location.address,
-                    "city": shop.location.city,
-                    "county": shop.location.county,
-                    "postcode": shop.location.postcode
-                }
-            }
-            for shop in shops
-        ]
+        "features": []
     }
     
-    with open(output_dir / "farms.geo.json", "w") as f:
-        json.dump(geojson, f, indent=2)
+    for shop in shops:
+        feature = {
+            "type": "Feature",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [shop.location.lng, shop.location.lat]
+            },
+            "properties": {
+                "id": shop.id,
+                "name": shop.name,
+                "slug": shop.slug,
+                "address": shop.location.address,
+                "city": shop.location.city,
+                "county": shop.location.county,
+                "postcode": shop.location.postcode,
+                "phone": shop.contact.phone,
+                "website": shop.contact.website,
+                "offerings": shop.offerings,
+                "rating": shop.rating,
+                "user_ratings_total": shop.user_ratings_total,
+                "price_level": shop.price_level,
+                "place_id": shop.place_id,
+                "types": shop.types
+            }
+        }
+        geojson["features"].append(feature)
     
-    # Count total images
-    total_images = sum(len(shop.images) for shop in shops)
-    print(f"✅ Saved {len(shops)} farm shops with {total_images} images to dist/farms.uk.json and dist/farms.geo.json")
+    with open(output_dir / "farms.geo.json", "w", encoding="utf-8") as f:
+        json.dump(geojson, f, indent=2, ensure_ascii=False)
+    
+    print(f"✅ Saved {len(shops)} farm shops to dist/farms.uk.json and dist/farms.geo.json")
+
+async def fetch_images_only(max_images: int = 1):
+    """Fetch only images for existing farms."""
+    print("📸 Fetching images for existing farms...")
+    
+    # Load existing farms
+    try:
+        with open("dist/farms.uk.json", "r", encoding="utf-8") as f:
+            farms_data = json.load(f)
+    except FileNotFoundError:
+        print("❌ farms.uk.json not found. Run the main script first.")
+        return
+    
+    updated_farms = []
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        for i, farm in enumerate(farms_data):
+            print(f"📸 Processing {i+1}/{len(farms_data)}: {farm['name']}")
+            
+            place_id = farm.get('place_id')
+            if not place_id:
+                print(f"  ⚠️  No place_id for {farm['name']}, skipping")
+                updated_farms.append(farm)
+                continue
+            
+            # Get place details to check for photos
+            details = await get_place_details(client, place_id)
+            if details and details.get('photos'):
+                photos = details['photos']
+                print(f"  📸 Found {len(photos)} photos")
+                images = await get_place_images(client, place_id, photos, max_images)
+                farm['images'] = images
+            else:
+                farm['images'] = []
+                print(f"  📸 No photos found")
+            
+            updated_farms.append(farm)
+            
+            # Be nice to the API
+            await asyncio.sleep(1)
+    
+    # Save updated farms
+    with open("dist/farms.uk.json", "w", encoding="utf-8") as f:
+        json.dump(updated_farms, f, indent=2, ensure_ascii=False)
+    
+    print(f"✅ Updated {len(updated_farms)} farms with images")
 
 if __name__ == "__main__":
     asyncio.run(main())
